@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Monitoreo Medico - Panel</title>
+    <link rel="stylesheet" href="estilos.css">
+</head>
+<body style="background-image: url('fondoHb.png'); background-size: cover; background-repeat: no-repeat; background-position: center; background-attachment: fixed; margin: 0;">
+
+    <div class="barra-superior">
+        <h1 id="saludo-usuario">Bienvenido</h1>
+        <div class="botones-manuales">
+            <a href="ManualUsuario.pdf" target="_blank" style="background-color: #17a2b8;" title="Ver Manual de Usuario en el navegador">Manual Usuario</a>
+            <a href="ManualUsuario.pdf" download="Manual_Usuario_AMIGLO.pdf" style="background-color: #28a745;" title="Descargar PDF del Manual de Usuario">📥 Descargar</a>
+
+            <a href="ManualTecnico.pdf" target="_blank" style="background-color: #6f42c1;" title="Ver Manual Técnico en el navegador">Manual Técnico</a>
+            <a href="ManualTecnico.pdf" download="Manual_Tecnico_AMIGLO.pdf" style="background-color: #20c997;" title="Descargar PDF del Manual Técnico">📥 Descargar</a>
+
+            <a href="#" onclick="cerrarSesion()" style="background-color: #dc3545; margin-left: 15px;">Salir</a>
+        </div>
+    </div>
+
+    <div class="contenedor">
+
+        <div id="seccion-administrador" style="display: none;">
+            <div class="formulario-admin">
+                <h3 id="titulo-formulario">Registrar Nuevo Paciente en el Sistema</h3>
+                <input type="hidden" id="reg-id">
+                
+                <div class="campo" style="display:inline-block; margin-right:15px;">
+                    <label>Nombre Completo:</label>
+                    <input type="text" id="reg-nombre">
+                </div>
+                <div class="campo" style="display:inline-block; margin-right:15px;">
+                    <label>Correo Electrónico:</label>
+                    <input type="email" id="reg-correo">
+                </div>
+                <div class="campo" style="display:inline-block; margin-right:15px;">
+                    <label>Contraseña:</label>
+                    <input type="password" id="reg-contrasena" placeholder="******">
+                </div>
+                <div class="campo" style="display:inline-block; margin-right:15px;">
+                    <label>Género:</label>
+                    <select id="reg-genero" style="width:150px;">
+                        <option value="Masculino">Masculino</option>
+                        <option value="Femenino">Femenino</option>
+                    </select>
+                </div>
+                
+                <br>
+                <button class="boton" id="btn-principal-form" onclick="procesarFormulario()" style="width:200px;">Registrar Paciente</button>
+                <button class="boton" id="btn-cancelar-edicion" onclick="cancelarEdicion()" style="width:150px; background-color:#6c757d; display:none;">Cancelar</button>
+                <div id="mensaje-registro" style="color:green; font-weight:bold; margin-top:10px;"></div>
+            </div>
+
+            <h3>Lista Global de Usuarios Registrados</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nombre Completo</th>
+                        <th>Correo Electrónico</th>
+                        <th>Género</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-usuarios-admin"></tbody>
+            </table>
+        </div>
+
+        <div id="seccion-paciente" style="display: none;">
+            <div class="tarjeta-datos">
+                <h3>Ultimo Reporte Recibido del ESP32</h3>
+                <p><strong>Nivel Hemoglobina:</strong> <span id="ultimo-hb">--</span> g/dL</p>
+                <p><strong>Temperatura Corporal:</strong> <span id="ultimo-temp">--</span> °C</p>
+                
+                <br>
+                <button class="boton" id="btn-esperar" onclick="iniciarEspera()" style="background-color: #17a2b8; width: 200px;">Esperar Resultado</button>
+                <button class="boton" id="btn-guardar" onclick="guardarEnHistorial()" style="background-color: #28a745; width: 200px; display: none;">Guardar en Historial</button>
+                <span id="mensaje-espera" style="margin-left: 10px; color: #666; font-weight: bold;"></span>
+            </div>
+
+            <h3>Historial Clínico de Mediciones</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Paciente</th>
+                        <th>Nivel Hemoglobina</th>
+                        <th>Temperatura</th>
+                        <th>Fecha y Hora</th>
+                        <th>Alerta Médica</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-historial"></tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <script>
+        var modoEdicion = false;
+        var intervaloEspera = null; // Variable global para controlar la busqueda en caché
+
+        window.onload = function() {
+            var token = localStorage.getItem("token_sanctum");
+            var idUsuario = localStorage.getItem("id_usuario");
+            var nombre = localStorage.getItem("nombre_usuario");
+
+            if (token === null) {
+                window.location.href = "index.html";
+                return;
+            }
+
+            if (idUsuario === "1") {
+                document.getElementById("saludo-usuario").innerHTML = "Administrador: " + nombre;
+                document.getElementById("seccion-administrador").style.display = "block";
+                cargarUsuariosSistema(token);
+            } else {
+                document.getElementById("saludo-usuario").innerHTML = "Paciente: " + nombre;
+                document.getElementById("seccion-paciente").style.display = "block";
+                cargarHistorialPaciente(token, idUsuario);
+            }
+        };
+
+        // --- FUNCIONES DEL ADMINISTRADOR ---
+
+        function cargarUsuariosSistema(token) {
+            fetch("http://127.0.0.1:8000/api/usuarios/listar", {
+                method: "GET",
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                }
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(lista) {
+                var tabla = document.getElementById("tabla-usuarios-admin");
+                tabla.innerHTML = "";
+                for (var i = 0; i < lista.length; i++) {
+                    var u = lista[i];
+                    var botones = "";
+                    if (u.id !== 1) {
+                        botones = "<button class='btn-tabla btn-editar' onclick='prepararEdicion(" + JSON.stringify(u) + ")'>Editar</button>" +
+                                  "<button class='btn-tabla btn-historial' onclick='verHistorialAdmin(" + u.id + ", \"" + u.full_name + "\")'>Historial</button>" +
+                                  "<button class='btn-tabla btn-eliminar' onclick='eliminarUsuarioSistema(" + u.id + ")'>Eliminar</button>";
+                    } else {
+                        botones = "<span style='color:gray;'>Protegido</span>";
+                    }
+                    
+                    var fila = "<tr><td>" + u.id + "</td><td>" + u.full_name + "</td><td>" + u.email + "</td><td>" + u.gender + "</td><td>" + botones + "</td></tr>";
+                    tabla.innerHTML = tabla.innerHTML + fila;
+                }
+            });
+        }
+
+        function verHistorialAdmin(idUsuario, nombreUsuario) {
+            window.location.href = "historial_admin.html?id=" + idUsuario + "&nombre=" + encodeURIComponent(nombreUsuario);
+        }
+
+        function prepararEdicion(u) {
+            modoEdicion = true;
+            document.getElementById("titulo-formulario").innerHTML = "Modificar Datos del Paciente";
+            document.getElementById("btn-principal-form").innerHTML = "Actualizar Datos";
+            document.getElementById("btn-cancelar-edicion").style.display = "inline-block";
+            document.getElementById("reg-id").value = u.id;
+            document.getElementById("reg-nombre").value = u.full_name;
+            document.getElementById("reg-correo").value = u.email;
+            document.getElementById("reg-genero").value = u.gender;
+        }
+
+        function cancelarEdicion() {
+            modoEdicion = false;
+            document.getElementById("titulo-formulario").innerHTML = "Registrar Nuevo Paciente en el Sistema";
+            document.getElementById("btn-principal-form").innerHTML = "Registrar Paciente";
+            document.getElementById("btn-cancelar-edicion").style.display = "none";
+            document.getElementById("reg-id").value = "";
+            document.getElementById("reg-nombre").value = "";
+            document.getElementById("reg-correo").value = "";
+            document.getElementById("reg-contrasena").value = "";
+        }
+
+        function procesarFormulario() {
+            var token = localStorage.getItem("token_sanctum");
+            var id = document.getElementById("reg-id").value;
+            var url = modoEdicion ? "http://127.0.0.1:8000/api/usuarios/actualizar" : "http://127.0.0.1:8000/api/usuarios/registrar";
+
+            var datos = {
+                id_usuario: id,
+                nombre_completo: document.getElementById("reg-nombre").value,
+                correo: document.getElementById("reg-correo").value,
+                contrasena: document.getElementById("reg-contrasena").value,
+                genero: document.getElementById("reg-genero").value
+            };
+
+            fetch(url, {
+                method: "POST",
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(datos)
+            })
+            .then(function(res) { return res.json(); })
+            .then(function() {
+                document.getElementById("mensaje-registro").innerHTML = "¡Operación realizada con éxito!";
+                cancelarEdicion();
+                cargarUsuariosSistema(token);
+                setTimeout(function() { document.getElementById("mensaje-registro").innerHTML = ""; }, 3000);
+            });
+        }
+
+        function eliminarUsuarioSistema(id) {
+            var token = localStorage.getItem("token_sanctum");
+            if (confirm("¿Seguro de eliminar este paciente?") == true) {
+                fetch("http://127.0.0.1:8000/api/usuarios/eliminar", {
+                    method: "POST",
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ id_usuario: id })
+                })
+                .then(function() { cargarUsuariosSistema(token); });
+            }
+        }
+
+        // --- FUNCIONES DEL PACIENTE ---
+
+        function cargarHistorialPaciente(token, idUsuario) {
+            fetch("http://127.0.0.1:8000/api/historial?id_usuario=" + idUsuario, {
+                method: "GET",
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                }
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(lista) {
+                var cuerpo = document.getElementById("tabla-historial");
+                cuerpo.innerHTML = "";
+                for (var i = 0; i < lista.length; i++) {
+                    var m = lista[i].Alerta_Medica ? lista[i].Alerta_Medica : "Sin anomalias (Sano)";
+                    var fila = "<tr><td>" + lista[i].Paciente + "</td><td>" + lista[i].Hemoglobina + " g/dL</td><td>" + lista[i].Temperatura + " °C</td><td>" + lista[i].Fecha_Hora + "</td><td>" + m + "</td></tr>";
+                    cuerpo.innerHTML = cuerpo.innerHTML + fila;
+                }
+            });
+        }
+
+        // --- LÓGICA DE ESPERA TEMPORAL DE LECTURAS ---
+
+        function iniciarEspera() {
+            var token = localStorage.getItem("token_sanctum");
+            document.getElementById("btn-esperar").style.display = "none";
+            document.getElementById("mensaje-espera").style.color = "#666";
+            document.getElementById("mensaje-espera").innerHTML = "Esperando datos del ESP32... (Coloque el dedo en el sensor)";
+
+            // Preguntamos a Laravel cada 3 segundos si ya llegó el dato a la caché
+            intervaloEspera = setInterval(function() {
+                fetch("http://127.0.0.1:8000/api/sensor/obtener-temporal", {
+                    method: "GET",
+                    headers: { "Authorization": "Bearer " + token }
+                })
+                .then(function(res) { return res.json(); })
+                .then(function(datos) {
+                    if(datos.encontrado == true) {
+                        clearInterval(intervaloEspera); // Detenemos la busqueda
+                        document.getElementById("mensaje-espera").innerHTML = "¡Lectura recibida! Revise sus niveles.";
+                        document.getElementById("mensaje-espera").style.color = "green";
+                        
+                        document.getElementById("ultimo-hb").innerHTML = datos.datos.hemoglobin_level;
+                        document.getElementById("ultimo-temp").innerHTML = datos.datos.temperature;
+                        
+                        document.getElementById("btn-guardar").style.display = "inline-block";
+                    }
+                });
+            }, 3000);
+        }
+
+        function guardarEnHistorial() {
+            var token = localStorage.getItem("token_sanctum");
+            var idUsuario = localStorage.getItem("id_usuario");
+
+            fetch("http://127.0.0.1:8000/api/sensor/confirmar", {
+                method: "POST",
+                headers: { "Authorization": "Bearer " + token }
+            })
+            .then(function(res) { return res.json(); })
+            .then(function(datos) {
+                document.getElementById("btn-guardar").style.display = "none";
+                document.getElementById("btn-esperar").style.display = "inline-block";
+                document.getElementById("mensaje-espera").innerHTML = "¡Registro guardado y analizado exitosamente!";
+                
+                // Reiniciamos los valores visuales
+                document.getElementById("ultimo-hb").innerHTML = "--";
+                document.getElementById("ultimo-temp").innerHTML = "--";
+                
+                // Actualizamos la tabla de abajo para que aparezca la nueva lectura y las alertas
+                cargarHistorialPaciente(token, idUsuario);
+            });
+        }
+
+        function cerrarSesion() {
+            localStorage.clear();
+            window.location.href = "index.html";
+        }
+    </script>
+</body>
+</html>

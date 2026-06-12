@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Monitoreo Medico - Historial Paciente</title>
+    <link rel="stylesheet" href="estilos.css">
+</head>
+<body style="background-image: url('fondoHb.png'); background-size: cover; background-repeat: no-repeat; background-position: center; background-attachment: fixed; margin: 0;">
+
+    <div class="barra-superior">
+        <h1 id="titulo-pagina">Cargando historial...</h1>
+        <div class="botones-manuales">
+            <a href="dashboard.html" style="background-color: #6c757d;">⬅ Volver al Panel</a>
+        </div>
+    </div>
+
+    <div class="contenedor">
+        <div class="tarjeta-datos">
+            <h3>Registro Clínico de Mediciones</h3>
+            <p>A continuación se muestran todas las lecturas enviadas por el hardware de este paciente en específico.</p>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Nivel Hemoglobina</th>
+                    <th>Temperatura</th>
+                    <th>Fecha y Hora</th>
+                    <th>Alerta Médica Registrada</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-historial-especifico">
+                </tbody>
+        </table>
+    </div>
+
+    <script>
+        window.onload = function() {
+            var token = localStorage.getItem("token_sanctum");
+            var idAdmin = localStorage.getItem("id_usuario");
+
+            // Validacion de seguridad basica
+            if (token === null || idAdmin !== "1") {
+                window.location.href = "index.html";
+                return;
+            }
+
+            // Extraemos los parametros que mandamos por la URL
+            var urlParams = new URLSearchParams(window.location.search);
+            var idPaciente = urlParams.get('id');
+            var nombrePaciente = urlParams.get('nombre');
+
+            if(idPaciente !== null) {
+                document.getElementById("titulo-pagina").innerHTML = "Historial Médico de: " + nombrePaciente;
+                cargarHistorial(token, idPaciente);
+            } else {
+                document.getElementById("titulo-pagina").innerHTML = "Error: Paciente no especificado.";
+            }
+        };
+
+        function cargarHistorial(token, idPaciente) {
+            // Llamamos al endpoint que ya teniamos, pero con el ID del paciente elegido
+            fetch("http://127.0.0.1:8000/api/historial?id_usuario=" + idPaciente, {
+                method: "GET",
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    "Content-Type": "application/json"
+                }
+            })
+            .then(function(respuesta) { return respuesta.json(); })
+            .then(function(listaLecturas) {
+                var cuerpoTabla = document.getElementById("tabla-historial-especifico");
+                cuerpoTabla.innerHTML = "";
+
+                if(listaLecturas.length === 0){
+                    cuerpoTabla.innerHTML = "<tr><td colspan='4' style='text-align:center;'>El paciente no tiene lecturas registradas.</td></tr>";
+                    return;
+                }
+
+                for (var i = 0; i < listaLecturas.length; i++) {
+                    var lectura = listaLecturas[i];
+                    var alerta = lectura.Alerta_Medica ? "<span style='color:red; font-weight:bold;'>" + lectura.Alerta_Medica + "</span>" : "<span style='color:green;'>Sano</span>";
+
+                    var fila = "<tr>" +
+                        "<td>" + lectura.Hemoglobina + " g/dL</td>" +
+                        "<td>" + lectura.Temperatura + " °C</td>" +
+                        "<td>" + lectura.Fecha_Hora + "</td>" +
+                        "<td>" + alerta + "</td>" +
+                    "</tr>";
+                    cuerpoTabla.innerHTML += fila;
+                }
+            })
+            .catch(function(error) {
+                console.log("Error cargando historial", error);
+            });
+        }
+    </script>
+</body>
+</html>

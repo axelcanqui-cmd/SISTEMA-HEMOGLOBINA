@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Monitoreo Medico - Ingreso</title>
+    <link rel="stylesheet" href="estilos.css">
+</head>
+<body style="background-image: url('fondoHb.png'); background-size: cover; background-repeat: no-repeat; background-position: center; background-attachment: fixed; margin: 0;">
+
+    <div class="contenedor-login">
+        <h2>Sistema de Monitoreo IoT</h2>
+        <p>Alertas de Anemia y Poliglobulia</p>
+        
+        <div class="campo">
+            <label>Correo Electronico:</label>
+            <input type="email" id="correo" placeholder="ejemplo@correo.com">
+        </div>
+        
+        <div class="campo">
+            <label>Contrasena:</label>
+            <input type="password" id="contrasena" placeholder="******">
+        </div>
+        
+        <button class="boton" onclick="ejecutarIngreso()">Ingresar</button>
+        <p id="mensaje-error" style="color: red;"></p>
+    </div>
+
+    <script>
+        function ejecutarIngreso() {
+            var correoTexto = document.getElementById("correo").value;
+            var contrasenaTexto = document.getElementById("contrasena").value;
+            var parrafoError = document.getElementById("mensaje-error");
+            
+            parrafoError.innerHTML = "";
+
+            var datosEnvio = {
+                email: correoTexto,
+                password: contrasenaTexto
+            };
+
+            // Llamamos a la API de Laravel de forma explicita con su ruta completa
+            fetch("http://127.0.0.1:8000/api/login", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(datosEnvio)
+            })
+            .then(function(respuesta) {
+                if (respuesta.status === 200) {
+                    return respuesta.json();
+                } else {
+                    throw new Error();
+                }
+            })
+            .then(function(datosResultado) {
+                localStorage.setItem("token_sanctum", datosResultado.token);
+                localStorage.setItem("id_usuario", datosResultado.usuario.id);
+                localStorage.setItem("nombre_usuario", datosResultado.usuario.full_name);
+
+                // Nos movemos al dashboard que esta en la misma carpeta
+                window.location.href = "dashboard.html";
+            })
+            .catch(function(error) {
+                parrafoError.innerHTML = "Error: Credenciales incorrectas.";
+            });
+        }
+    </script>
+</body>
+</html>
